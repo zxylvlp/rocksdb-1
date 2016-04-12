@@ -27,7 +27,6 @@ before_script:
   - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/gflags-2.1.2/lib"
   - export LIBRARY_PATH="$LIBRARY_PATH:/tmp/gflags-2.1.2/lib"
   - export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:/tmp/gflags-2.1.2/include"
-  - if [[ "${TRAVIS_OS_NAME}" == 'linux' ]]; then CXX=clang++-3.6; fi
   - if [[ "${TRAVIS_OS_NAME}" == 'osx' ]]; then brew install gflags snappy; fi
   - ulimit -n 2000 || true
 
