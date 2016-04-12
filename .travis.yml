@@ -1,22 +1,18 @@
 sudo: false
 language: cpp
+os:
+  - linux
+  - osx
+compiler: clang
 
+addons:
+   apt:
+      sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.6']
+      packages: ['clang-3.6', 'clang-format-3.6', 'zlib1g-dev', 'libbz2-dev', 'libsnappy-dev', 'curl', 'parallel']
 env:
-  - JOB_NAME=unittests
-  - JOB_NAME=jtest
-  - JOB_NAME=lite_build
-
-matrix:
-  include:
-    - os: linux
-      compiler: clang
-      env: COMPILER=clang++-3.6
-      addons:
-         apt:
-            sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.6']
-            packages: ['clang-3.6', 'clang-format-3.6', 'zlib1g-dev', 'libbz2-dev', 'libsnappy-dev', 'curl', 'parallel']
-    - os: osx
-      compiler: clang
+  - JOB_NAME=unittests COMPILER=clang++-3.6
+  - JOB_NAME=jtest COMPILER=clang++-3.6
+  - JOB_NAME=lite_build COMPILER=clang++-3.6
 
 install:
   # Build gflags
