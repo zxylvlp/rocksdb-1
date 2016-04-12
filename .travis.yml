@@ -1,12 +1,12 @@
 sudo: false
 language: cpp
 
+env:
+  - JOB_NAME=unittests
+  - JOB_NAME=jtest
+  - JOB_NAME=lite_build
+
 matrix:
-  env:
-    - JOB_NAME=unittests
-    - JOB_NAME=jtest
-    - JOB_NAME=lite_build
-  
   include:
     - os: linux
       compiler: clang
