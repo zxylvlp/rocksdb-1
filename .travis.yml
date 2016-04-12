@@ -14,7 +14,7 @@ matrix:
       addons:
          apt:
             sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.6']
-            packages: ['clang-3.6', 'clang-format-3.6', 'zlib1g-dev', 'libbz2-dev', 'libsnappy-dev', 'curl']
+            packages: ['clang-3.6', 'clang-format-3.6', 'zlib1g-dev', 'libbz2-dev', 'libsnappy-dev', 'curl', 'parallel']
     - os: osx
       compiler: clang
 
