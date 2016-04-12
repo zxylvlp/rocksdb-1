@@ -354,7 +354,7 @@ TESTS = \
 	ldb_cmd_test \
 	iostats_context_test
 
-SUBSET :=  $(shell echo $(TESTS) |sed s/^.*$(ROCKSDBTESTS_START)/$(ROCKSDBTESTS_START)/)
+SUBSET :=  $(shell echo $(TESTS) | sed 's/^.*$(ROCKSDBTESTS_START)/$(ROCKSDBTESTS_START)/' | sed 's/$(ROCKSDBTESTS_END).*/$(ROCKSDBTESTS_END)/')
 
 TOOLS = \
 	sst_dump \
