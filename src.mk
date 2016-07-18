@@ -168,6 +168,7 @@ LIB_SOURCES =                                                   \
   utilities/persistent_cache/persistent_cache_tier.cc           \
   utilities/persistent_cache/volatile_tier_impl.cc              \
   utilities/persistent_cache/block_cache_tier_file.cc           \
+  utilities/persistent_cache/block_cache_tier_layout.cc         \
   utilities/persistent_cache/block_cache_tier_metadata.cc       \
   utilities/persistent_cache/block_cache_tier.cc                \
   utilities/redis/redis_lists.cc                                \

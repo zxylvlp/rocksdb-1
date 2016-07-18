@@ -15,6 +15,7 @@
 #include "rocksdb/env.h"
 
 #include "utilities/persistent_cache/block_cache_tier_file_buffer.h"
+#include "utilities/persistent_cache/block_cache_tier_layout.h"
 #include "utilities/persistent_cache/lrulist.h"
 #include "utilities/persistent_cache/persistent_cache_tier.h"
 #include "utilities/persistent_cache/persistent_cache_util.h"
@@ -190,7 +191,7 @@ class WriteableCacheFile : public RandomAccessCacheFile {
   // read data from logical file
   bool Read(const LBA& lba, Slice* key, Slice* block, char* scratch) override {
     ReadLock _(&rwlock_);
-    const bool closed = eof_ && bufs_.empty();
+    const bool closed = eof_ && bufs_.data_.empty();
     if (closed) {
       // the file is closed, read from disk
       return RandomAccessCacheFile::Read(lba, key, block, scratch);
@@ -209,13 +210,19 @@ class WriteableCacheFile : public RandomAccessCacheFile {
 
   static const size_t kFileAlignmentSize = 4 * 1024;  // align file size
 
+  struct ElasticBuffer {
+    std::vector<CacheWriteBuffer*> data_;
+    size_t woff_ = 0;
+  };
+
   bool ReadBuffer(const LBA& lba, Slice* key, Slice* block, char* scratch);
   bool ReadBuffer(const LBA& lba, char* data);
-  bool ExpandBuffer(const size_t size);
+  bool ExpandBuffer(ElasticBuffer& bufs, const size_t size);
   void DispatchBuffer();
   void BufferWriteDone();
   void CloseAndOpenForReading();
   void ClearBuffers();
+  void Finalize();
   void Close();
 
   // File layout in memory
@@ -234,13 +241,15 @@ class WriteableCacheFile : public RandomAccessCacheFile {
   CacheWriteBufferAllocator* const alloc_ = nullptr;  // Buffer provider
   Writer* const writer_ = nullptr;                    // File writer thread
   std::unique_ptr<WritableFile> file_;   // RocksDB Env file abstraction
-  std::vector<CacheWriteBuffer*> bufs_;  // Written buffers
+  ElasticBuffer bufs_;                   // Data buffers
+  ElasticBuffer index_;
+  ElasticBuffer footer_;
+  FooterRecord footer_record_;           // Footer
   uint32_t size_ = 0;                    // Size of the file
   const uint32_t max_size_;              // Max size of the file
   bool eof_ = false;                     // End of file
   uint32_t disk_woff_ = 0;               // Offset to write on disk
-  size_t buf_woff_ = 0;                  // off into bufs_ to write
-  size_t buf_doff_ = 0;                  // off into bufs_ to dispatch
+  size_t bufs_doff_ = 0;
   size_t pending_ios_ = 0;               // Number of ios to disk in-progress
   bool enable_direct_reads_ = false;     // Should we enable direct reads
                                          // when reading from disk

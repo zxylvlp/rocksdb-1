@@ -18,7 +18,7 @@
 
 namespace rocksdb {
 
-static const double kStressFactor = .125;
+static const double kStressFactor = 1; //.125;
 
 #ifdef OS_LINUX
 static void OnOpenForRead(void* arg) {

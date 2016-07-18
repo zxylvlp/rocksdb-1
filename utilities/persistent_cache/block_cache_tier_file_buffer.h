@@ -36,10 +36,12 @@ class CacheWriteBuffer {
     assert(pos_ <= size_);
   }
 
-  void FillTrailingZeros() {
+  size_t FillTrailingZeros() {
     assert(pos_ <= size_);
-    memset(buf_.get() + pos_, '0', size_ - pos_);
+    size_t n = size_ - pos_;
+    memset(buf_.get() + pos_, '0', n);
     pos_ = size_;
+    return n;
   }
 
   void Reset() { pos_ = 0; }

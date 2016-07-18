@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "util/crc32c.h"
+#include "utilities/persistent_cache/block_cache_tier_layout.h"
 
 namespace rocksdb {
 
@@ -46,145 +47,6 @@ Status BlockCacheFile::Delete(uint64_t* size) {
     return status;
   }
   return env_->DeleteFile(Path());
-}
-
-//
-// CacheRecord
-//
-// Cache record represents the record on disk
-//
-// +--------+---------+----------+------------+---------------+-------------+
-// | magic  | crc     | key size | value size | key data      | value data  |
-// +--------+---------+----------+------------+---------------+-------------+
-// <-- 4 --><-- 4  --><-- 4   --><-- 4     --><-- key size  --><-- v-size -->
-//
-struct CacheRecordHeader {
-  CacheRecordHeader() {}
-  CacheRecordHeader(const uint32_t magic, const uint32_t key_size,
-                    const uint32_t val_size)
-      : magic_(magic), crc_(0), key_size_(key_size), val_size_(val_size) {}
-
-  uint32_t magic_;
-  uint32_t crc_;
-  uint32_t key_size_;
-  uint32_t val_size_;
-};
-
-struct CacheRecord {
-  CacheRecord() {}
-  CacheRecord(const Slice& key, const Slice& val)
-      : hdr_(MAGIC, static_cast<uint32_t>(key.size()),
-             static_cast<uint32_t>(val.size())),
-        key_(key),
-        val_(val) {
-    hdr_.crc_ = ComputeCRC();
-  }
-
-  uint32_t ComputeCRC() const;
-  bool Serialize(std::vector<CacheWriteBuffer*>* bufs, size_t* woff);
-  bool Deserialize(const Slice& buf);
-
-  static uint32_t CalcSize(const Slice& key, const Slice& val) {
-    return static_cast<uint32_t>(sizeof(CacheRecordHeader) + key.size() +
-                                 val.size());
-  }
-
-  static const uint32_t MAGIC = 0xfefa;
-
-  bool Append(std::vector<CacheWriteBuffer*>* bufs, size_t* woff,
-              const char* data, const size_t size);
-
-  CacheRecordHeader hdr_;
-  Slice key_;
-  Slice val_;
-};
-
-static_assert(sizeof(CacheRecordHeader) == 16, "DataHeader is not aligned");
-
-uint32_t CacheRecord::ComputeCRC() const {
-  uint32_t crc = 0;
-  CacheRecordHeader tmp = hdr_;
-  tmp.crc_ = 0;
-  crc = crc32c::Extend(crc, reinterpret_cast<const char*>(&tmp), sizeof(tmp));
-  crc = crc32c::Extend(crc, reinterpret_cast<const char*>(key_.data()),
-                       key_.size());
-  crc = crc32c::Extend(crc, reinterpret_cast<const char*>(val_.data()),
-                       val_.size());
-  return crc;
-}
-
-bool CacheRecord::Serialize(std::vector<CacheWriteBuffer*>* bufs,
-                            size_t* woff) {
-  assert(bufs->size());
-  return Append(bufs, woff, reinterpret_cast<const char*>(&hdr_),
-                sizeof(hdr_)) &&
-         Append(bufs, woff, reinterpret_cast<const char*>(key_.data()),
-                key_.size()) &&
-         Append(bufs, woff, reinterpret_cast<const char*>(val_.data()),
-                val_.size());
-}
-
-bool CacheRecord::Append(std::vector<CacheWriteBuffer*>* bufs, size_t* woff,
-                         const char* data, const size_t data_size) {
-  assert(*woff < bufs->size());
-
-  const char* p = data;
-  size_t size = data_size;
-
-  while (size && *woff < bufs->size()) {
-    CacheWriteBuffer* buf = (*bufs)[*woff];
-    const size_t free = buf->Free();
-    if (size <= free) {
-      buf->Append(p, size);
-      size = 0;
-    } else {
-      buf->Append(p, free);
-      p += free;
-      size -= free;
-      assert(!buf->Free());
-      assert(buf->Used() == buf->Capacity());
-    }
-
-    if (!buf->Free()) {
-      *woff += 1;
-    }
-  }
-
-  assert(!size);
-
-  return !size;
-}
-
-bool CacheRecord::Deserialize(const Slice& data) {
-  assert(data.size() >= sizeof(CacheRecordHeader));
-  if (data.size() < sizeof(CacheRecordHeader)) {
-    return false;
-  }
-
-  memcpy(&hdr_, data.data(), sizeof(hdr_));
-
-  assert(hdr_.key_size_ + hdr_.val_size_ + sizeof(hdr_) == data.size());
-  if (hdr_.key_size_ + hdr_.val_size_ + sizeof(hdr_) != data.size()) {
-    return false;
-  }
-
-  key_ = Slice(data.data_ + sizeof(hdr_), hdr_.key_size_);
-  val_ = Slice(key_.data_ + hdr_.key_size_, hdr_.val_size_);
-
-  if (!(hdr_.magic_ == MAGIC && ComputeCRC() == hdr_.crc_)) {
-    fprintf(stderr, "** magic %d ** \n", hdr_.magic_);
-    fprintf(stderr, "** key_size %d ** \n", hdr_.key_size_);
-    fprintf(stderr, "** val_size %d ** \n", hdr_.val_size_);
-    fprintf(stderr, "** key %s ** \n", key_.ToString().c_str());
-    fprintf(stderr, "** val %s ** \n", val_.ToString().c_str());
-    for (size_t i = 0; i < hdr_.val_size_; ++i) {
-      fprintf(stderr, "%d.", (uint8_t)val_.data()[i]);
-    }
-    fprintf(stderr, "\n** cksum %d != %d **", hdr_.crc_, ComputeCRC());
-  }
-
-  assert(hdr_.magic_ == MAGIC && ComputeCRC() == hdr_.crc_);
-  return hdr_.magic_ == MAGIC && ComputeCRC() == hdr_.crc_;
 }
 
 //
@@ -243,8 +105,8 @@ bool RandomAccessCacheFile::ParseRec(const LBA& lba, Slice* key, Slice* val,
     return false;
   }
 
-  *key = Slice(rec.key_);
-  *val = Slice(rec.val_);
+  *key = Slice(rec.key());
+  *val = Slice(rec.val());
 
   return true;
 }
@@ -304,9 +166,13 @@ bool WriteableCacheFile::Append(const Slice& key, const Slice& val, LBA* lba) {
   }
 
   // estimate the space required to store the (key, val)
-  uint32_t rec_size = CacheRecord::CalcSize(key, val);
+  const uint32_t rec_size = CacheRecord::CalcSize(key, val);
+  const uint32_t index_rec_size = IndexRecord::CalcSize(key);
+  const uint32_t footer_rec_size = FooterRecord::CalcSize();
 
-  if (!ExpandBuffer(rec_size)) {
+  if (!ExpandBuffer(bufs_, rec_size)
+      || !ExpandBuffer(index_, index_rec_size)
+      || !ExpandBuffer(footer_, footer_rec_size)) {
     // unable to expand the buffer
     Debug(log_, "Error expanding buffers. size=%d", rec_size);
     return false;
@@ -316,15 +182,30 @@ bool WriteableCacheFile::Append(const Slice& key, const Slice& val, LBA* lba) {
   lba->off_ = disk_woff_;
   lba->size_ = rec_size;
 
-  CacheRecord rec(key, val);
-  if (!rec.Serialize(&bufs_, &buf_woff_)) {
+  CacheRecord cache_rec(key, val);
+  if (!cache_rec.Serialize(&bufs_.data_, &bufs_.woff_)) {
     // unexpected error: unable to serialize the data
-    assert(!"Error serializing record");
+    assert(!"error serializing cache record");
     return false;
   }
 
+  footer_record_.cache_nentry()++;
+
+  IndexRecord index_rec(key, disk_woff_, rec_size);
+  if (!index_rec.Serialize(&index_.data_, &index_.woff_)) {
+    // unexpected error
+    assert(!"error serializing index record");
+    return false;
+  }
+
+  footer_record_.index_nentry()++;
+
   disk_woff_ += rec_size;
   eof_ = disk_woff_ >= max_size_;
+
+  if (eof_) {
+    Finalize();
+  }
 
   // dispatch buffer for flush
   DispatchBuffer();
@@ -332,14 +213,14 @@ bool WriteableCacheFile::Append(const Slice& key, const Slice& val, LBA* lba) {
   return true;
 }
 
-bool WriteableCacheFile::ExpandBuffer(const size_t size) {
+bool WriteableCacheFile::ExpandBuffer(ElasticBuffer& bufs, const size_t size) {
   rwlock_.AssertHeld();
   assert(!eof_);
 
   // determine if there is enough space
   size_t free = 0;  // compute the free space left in buffer
-  for (size_t i = buf_woff_; i < bufs_.size(); ++i) {
-    free += bufs_[i]->Free();
+  for (size_t i = bufs.woff_; i < bufs.data_.size(); ++i) {
+    free += bufs.data_[i]->Free();
     if (size <= free) {
       // we have enough space in the buffer
       return true;
@@ -357,7 +238,7 @@ bool WriteableCacheFile::ExpandBuffer(const size_t size) {
 
     size_ += static_cast<uint32_t>(buf->Free());
     free += buf->Free();
-    bufs_.push_back(buf);
+    bufs.data_.push_back(buf);
   }
 
   assert(free >= size);
@@ -367,28 +248,28 @@ bool WriteableCacheFile::ExpandBuffer(const size_t size) {
 void WriteableCacheFile::DispatchBuffer() {
   rwlock_.AssertHeld();
 
-  assert(bufs_.size());
-  assert(buf_doff_ <= buf_woff_);
-  assert(buf_woff_ <= bufs_.size());
+  assert(bufs_.data_.size());
+  assert(bufs_doff_ <= bufs_.woff_);
+  assert(bufs_.woff_ <= bufs_.data_.size());
 
   if (pending_ios_) {
     return;
   }
 
-  if (!eof_ && buf_doff_ == buf_woff_) {
+  if (!eof_ && bufs_doff_ == bufs_.woff_) {
     // dispatch buffer is pointing to write buffer and we haven't hit eof
     return;
   }
 
-  assert(eof_ || buf_doff_ < buf_woff_);
-  assert(buf_doff_ < bufs_.size());
+  assert(eof_ || bufs_doff_ < bufs_.woff_);
+  assert(bufs_doff_ < bufs_.data_.size());
   assert(file_);
 
-  auto* buf = bufs_[buf_doff_];
-  const uint64_t file_off = buf_doff_ * alloc_->BufferSize();
+  auto* buf = bufs_.data_[bufs_doff_];
+  const uint64_t file_off = bufs_doff_ * alloc_->BufferSize();
 
   assert(!buf->Free() ||
-         (eof_ && buf_doff_ == buf_woff_ && buf_woff_ < bufs_.size()));
+         (eof_ && bufs_doff_ == bufs_.woff_ && bufs_.woff_ < bufs_.data_.size()));
   // we have reached end of file, and there is space in the last buffer
   // pad it with zero for direct IO
   buf->FillTrailingZeros();
@@ -398,24 +279,57 @@ void WriteableCacheFile::DispatchBuffer() {
   writer_->Write(file_.get(), buf, file_off,
                  std::bind(&WriteableCacheFile::BufferWriteDone, this));
   pending_ios_++;
-  buf_doff_++;
+  bufs_doff_++;
 }
 
 void WriteableCacheFile::BufferWriteDone() {
   WriteLock _(&rwlock_);
 
-  assert(bufs_.size());
+  assert(bufs_.data_.size());
 
   pending_ios_--;
 
-  if (buf_doff_ < bufs_.size()) {
+  if (bufs_doff_ < bufs_.data_.size()) {
     DispatchBuffer();
   }
 
-  if (eof_ && buf_doff_ >= bufs_.size() && !pending_ios_) {
+  if (eof_ && bufs_doff_ >= bufs_.data_.size() && !pending_ios_) {
     // end-of-file reached, move to read mode
     CloseAndOpenForReading();
   }
+}
+
+void WriteableCacheFile::Finalize() {
+  assert(eof_);
+  assert(!bufs_.data_.empty());
+  assert(!index_.data_.empty());
+  assert(!footer_.data_.empty());
+
+  footer_record_.cache_pad_off() = disk_woff_;
+  disk_woff_ += bufs_.data_[bufs_.woff_]->FillTrailingZeros();
+
+  footer_record_.index_off() = disk_woff_;
+
+  bufs_.data_.insert(bufs_.data_.end(), index_.data_.begin(),
+                     index_.data_.end());
+  disk_woff_ += index_.data_.size() * alloc_->BufferSize(); 
+
+  footer_record_.index_pad_off() = disk_woff_;
+
+  disk_woff_ += index_.data_[index_.woff_]->FillTrailingZeros();
+
+  SerializeFooter();
+  assert(!footer_.data_[footer_.woff_]->FillTrailingZeros());
+
+  bufs_.data_.insert(bufs_.data_.end(), footer_.data_.begin(),
+                     footer_.data_.end());
+  disk_woff_ += footer_.data_.size() * alloc_->BufferSize();
+
+  bufs_.woff_ += index_.data_.size();
+  bufs_.woff_ += footer_.data_.size();
+
+  index_.data_.clear();
+  footer_.data_.clear();
 }
 
 void WriteableCacheFile::CloseAndOpenForReading() {
@@ -453,12 +367,12 @@ bool WriteableCacheFile::ReadBuffer(const LBA& lba, char* data) {
   // offset into the start buffer
   size_t start_off = lba.off_ % alloc_->BufferSize();
 
-  assert(start_idx <= buf_woff_);
+  assert(start_idx <= bufs_.woff_);
 
-  for (size_t i = start_idx; pending_nbytes && i < bufs_.size(); ++i) {
-    assert(i <= buf_woff_);
-    auto* buf = bufs_[i];
-    assert(i == buf_woff_ || !buf->Free());
+  for (size_t i = start_idx; pending_nbytes && i < bufs_.data_.size(); ++i) {
+    assert(i <= bufs_.woff_);
+    auto* buf = bufs_.data_[i];
+    assert(i == bufs_.woff_ || !buf->Free());
     // bytes to write to the buffer
     size_t nbytes = pending_nbytes > (buf->Used() - start_off)
                         ? (buf->Used() - start_off)
@@ -485,8 +399,8 @@ void WriteableCacheFile::Close() {
 
   assert(size_ >= max_size_);
   assert(disk_woff_ >= max_size_);
-  assert(buf_doff_ == bufs_.size());
-  assert(bufs_.size() - buf_woff_ <= 1);
+  assert(bufs_doff_ == bufs_.data_.size());
+  assert(bufs_.data_.size() - bufs_.woff_ <= 1);
   assert(!pending_ios_);
 
   Info(log_, "Closing file %s. size=%d written=%d", Path().c_str(), size_,
@@ -500,11 +414,11 @@ void WriteableCacheFile::Close() {
 }
 
 void WriteableCacheFile::ClearBuffers() {
-  for (size_t i = 0; i < bufs_.size(); ++i) {
-    alloc_->Deallocate(bufs_[i]);
+  for (size_t i = 0; i < bufs_.data_.size(); ++i) {
+    alloc_->Deallocate(bufs_.data_[i]);
   }
 
-  bufs_.clear();
+  bufs_.data_.clear();
 }
 
 //
