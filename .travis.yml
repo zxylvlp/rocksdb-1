@@ -12,13 +12,13 @@ addons:
       packages: ['clang-3.6' , 'zlib1g-dev', 'libbz2-dev', 'libsnappy-dev', 'curl']
 env:
   # Run all tests before db_block_cache_test (db_test, db_test2)
-  - JOB_NAME=unittests ROCKSDBTESTS_END=db_block_cache_test
+  #- JOB_NAME=unittests ROCKSDBTESTS_END=db_block_cache_test
   # Run all tests starting from db_block_cache_test (db_block_cache_test, db_iter_test, ...)
   - JOB_NAME=unittests ROCKSDBTESTS_START=db_block_cache_test
   # Run java tests
-  - JOB_NAME=java_test
+  #- JOB_NAME=java_test
   # Build ROCKSDB_LITE
-  - JOB_NAME=lite_build
+  #- JOB_NAME=lite_build
 
 install:
   # Build gflags
@@ -33,9 +33,7 @@ before_script:
   - export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:/tmp/gflags-2.1.2/include"
   - if [[ "${TRAVIS_OS_NAME}" == 'linux' ]]; then CXX=clang++-3.6; fi
   - if [[ "${TRAVIS_OS_NAME}" == 'osx' ]]; then brew install gflags snappy; fi
-  # Limit the maximum number of open file descriptors to 2000
-  - ulimit -n 2000 || true
-
+  
 script:
   - if [[ "${JOB_NAME}" == 'unittests' ]]; then OPT=-DTRAVIS V=1 make -j4 check_some; fi
   - if [[ "${JOB_NAME}" == 'java_test' ]]; then OPT=-DTRAVIS V=1 make clean jclean rocksdbjava jtest; fi
