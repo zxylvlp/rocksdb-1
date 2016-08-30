@@ -1,7 +1,6 @@
 sudo: false
 language: cpp
 os:
-  - linux
   - osx
 compiler:
   - clang
@@ -17,13 +16,6 @@ env:
   - JOB_NAME=lite_build
 
 before_script:
-  # Add gflags to include/library paths
-  # TODO(noetzli): Remove when gflags available through Travis
-  - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/gflags-2.1.2/lib"
-  - export LIBRARY_PATH="$LIBRARY_PATH:/tmp/gflags-2.1.2/lib"
-  - export CPLUS_INCLUDE_PATH="$CPLUS_INCLUDE_PATH:/tmp/gflags-2.1.2/include"
-  - if [[ "${TRAVIS_OS_NAME}" == 'linux' ]]; then CXX=clang++-3.6; fi
-  - if [[ "${TRAVIS_OS_NAME}" == 'osx' ]]; then brew install gflags snappy; fi
   # Limit the maximum number of open file descriptors to 2000
   - ulimit -n 2000 || true
 
