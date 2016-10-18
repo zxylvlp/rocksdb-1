@@ -1,6 +1,6 @@
 {
   "allowDirectMerges": true,
-  "allowBotCommands": true,
-  "internalRepository": "fbsource",
+  "allowBotCommands": false,
+  "internalRepository": "fbcode",
   "cannedReplies": {}
 }
