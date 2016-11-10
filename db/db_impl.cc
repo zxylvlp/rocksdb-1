@@ -1518,18 +1518,6 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
         }
       }
 
-      bool no_prev_seq = true;
-      if (!immutable_db_options_.allow_2pc) {
-        *next_sequence = sequence;
-      } else {
-        if (*next_sequence == kMaxSequenceNumber) {
-          *next_sequence = sequence;
-        } else {
-          no_prev_seq = false;
-          WriteBatchInternal::SetSequence(&batch, *next_sequence);
-        }
-      }
-
 #ifndef ROCKSDB_LITE
       if (immutable_db_options_.wal_filter != nullptr) {
         WriteBatch new_batch;
@@ -1616,15 +1604,6 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
           &batch, column_family_memtables_.get(), &flush_scheduler_, true,
           log_number, this, false /* concurrent_memtable_writes */,
           next_sequence, &has_valid_writes);
-      // If it is the first log file and there is no column family updated
-      // after replaying the file, this file may be a stale file. We ignore
-      // sequence IDs from the file. Otherwise, if a newer stale log file that
-      // has been deleted, the sequenceID may be wrong.
-      if (immutable_db_options_.allow_2pc) {
-        if (no_prev_seq && !has_valid_writes) {
-          *next_sequence = kMaxSequenceNumber;
-        }
-      }
       MaybeIgnoreError(&status);
       if (!status.ok()) {
         // We are treating this as a failure while reading since we read valid
