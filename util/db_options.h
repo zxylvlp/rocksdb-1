@@ -29,7 +29,6 @@ struct ImmutableDBOptions {
   InfoLogLevel info_log_level;
   int max_open_files;
   int max_file_opening_threads;
-  uint64_t max_total_wal_size;
   std::shared_ptr<Statistics> statistics;
   bool disable_data_sync;
   bool use_fsync;
@@ -93,6 +92,7 @@ struct MutableDBOptions {
 
   int base_background_compactions;
   int max_background_compactions;
+  uint64_t max_total_wal_size;
 };
 
 }  // namespace rocksdb
