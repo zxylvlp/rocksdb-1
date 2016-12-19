@@ -575,7 +575,7 @@ DEFINE_bool(optimistic_transaction_db, false,
             "Open a OptimisticTransactionDB instance. "
             "Required for randomtransaction benchmark.");
 
-DEFINE_bool(blob_db, false,
+DEFINE_bool(use_blob_db, false,
             "Open a BlobDB instance. "
             "Required for largevalue benchmark.");
 
@@ -623,8 +623,6 @@ DEFINE_bool(report_bg_io_stats, false,
 
 DEFINE_bool(use_stderr_info_logger, false,
             "Write info logs to stderr instead of to LOG file. ");
-
-DEFINE_bool(use_blob_db, false, "Whether to use BlobDB. ");
 
 static enum rocksdb::CompressionType StringToCompressionType(const char* ctype) {
   assert(ctype);
@@ -3192,14 +3190,14 @@ class Benchmark {
       if (s.ok()) {
         db->db = ptr;
       }
-#endif  // ROCKSDB_LITE
     } else if (FLAGS_use_blob_db) {
-      BlobDBOptions blob_db_options;
-      BlobDB *ptr;
-      s = BlobDB::Open(options, blob_db_options, db_name, &ptr);
+      blob_db::BlobDBOptions blob_db_options;
+      blob_db::BlobDB* ptr;
+      s = blob_db::BlobDB::Open(options, blob_db_options, db_name, &ptr);
       if (s.ok()) {
         db->db = ptr;
       }
+#endif  // ROCKSDB_LITE
     } else {
       s = DB::Open(options, db_name, &db->db);
     }
@@ -3378,7 +3376,8 @@ class Benchmark {
         if (FLAGS_use_blob_db) {
           Slice val = gen.Generate(value_size_);
           int ttl = rand() % 86400;
-          BlobDB *blobdb = static_cast<BlobDB*>(db_with_cfh->db);
+          blob_db::BlobDB* blobdb =
+              static_cast<blob_db::BlobDB*>(db_with_cfh->db);
           s = blobdb->PutWithTTL(write_options_, key, val, ttl);
 
         } else if (FLAGS_num_column_families <= 1) {
