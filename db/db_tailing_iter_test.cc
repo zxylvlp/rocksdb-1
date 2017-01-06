@@ -23,6 +23,8 @@ class DBTestTailingIterator : public DBTestBase {
   DBTestTailingIterator() : DBTestBase("/db_tailing_iterator_test") {}
 };
 
+#if 0
+
 TEST_F(DBTestTailingIterator, TailingIteratorSingle) {
   ReadOptions read_options;
   read_options.tailing = true;
@@ -119,6 +121,8 @@ TEST_F(DBTestTailingIterator, TailingIteratorSeekToNext) {
     ASSERT_EQ(iter->key().compare(key), 0);
   }
 }
+
+#endif
 
 TEST_F(DBTestTailingIterator, TailingIteratorTrimSeekToNext) {
   const uint64_t k150KB = 150 * 1024;
@@ -254,6 +258,7 @@ TEST_F(DBTestTailingIterator, TailingIteratorTrimSeekToNext) {
   }
 }
 
+#if 0
 TEST_F(DBTestTailingIterator, TailingIteratorDeletes) {
   CreateAndReopenWithCF({"pikachu"}, CurrentOptions());
   ReadOptions read_options;
@@ -805,6 +810,7 @@ TEST_F(DBTestTailingIterator, SeekToFirstWithUpperBoundBug) {
   ASSERT_TRUE(iter->Valid());
   ASSERT_EQ(iter->key().ToString(), "aa");
 }
+#endif
 
 }  // namespace rocksdb
 

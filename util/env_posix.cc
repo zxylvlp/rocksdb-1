@@ -262,7 +262,6 @@ class PosixEnv : public Env {
       // offset.
       // More info here: https://linux.die.net/man/2/pwrite
       flags |= O_WRONLY;
-      flags |= O_APPEND;
 #ifndef OS_MACOSX
       flags |= O_DIRECT;
 #endif
