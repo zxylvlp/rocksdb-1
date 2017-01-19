@@ -209,6 +209,8 @@ class MemTableList {
   // PickMemtablesToFlush() is called.
   void FlushRequested() { flush_requested_ = true; }
 
+  bool HasFlushRequested() { return flush_requested_; }
+
   // Copying allowed
   // MemTableList(const MemTableList&);
   // void operator=(const MemTableList&);
