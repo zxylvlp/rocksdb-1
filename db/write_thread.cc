@@ -14,9 +14,7 @@
 namespace rocksdb {
 
 WriteThread::WriteThread(uint64_t max_yield_usec, uint64_t slow_yield_usec)
-    : max_yield_usec_(max_yield_usec),
-      slow_yield_usec_(slow_yield_usec),
-      newest_writer_(nullptr) {}
+    : max_yield_usec_(max_yield_usec), slow_yield_usec_(slow_yield_usec) {}
 
 uint8_t WriteThread::BlockingAwaitState(Writer* w, uint8_t goal_mask) {
   // We're going to block.  Lazily create the mutex.  We guarantee
@@ -182,7 +180,11 @@ void WriteThread::SetState(Writer* w, uint8_t new_state) {
   }
 }
 
-void WriteThread::LinkOne(Writer* w, bool* linked_as_leader) {
+WriteThreadImpl::WriteThreadImpl(uint64_t max_yield_usec,
+                                 uint64_t slow_yield_usec)
+    : WriteThread(max_yield_usec, slow_yield_usec), newest_writer_(nullptr) {}
+
+void WriteThreadImpl::LinkOne(Writer* w, bool* linked_as_leader) {
   assert(w->state == STATE_INIT);
 
   while (true) {
@@ -200,7 +202,7 @@ void WriteThread::LinkOne(Writer* w, bool* linked_as_leader) {
   }
 }
 
-void WriteThread::CreateMissingNewerLinks(Writer* head) {
+void WriteThreadImpl::CreateMissingNewerLinks(Writer* head) {
   while (true) {
     Writer* next = head->link_older;
     if (next == nullptr || next->link_newer != nullptr) {
@@ -212,7 +214,7 @@ void WriteThread::CreateMissingNewerLinks(Writer* head) {
   }
 }
 
-void WriteThread::JoinBatchGroup(Writer* w) {
+void WriteThreadImpl::JoinBatchGroup(Writer* w) {
   static AdaptationContext ctx("JoinBatchGroup");
 
   assert(w->batch != nullptr);
@@ -229,7 +231,7 @@ void WriteThread::JoinBatchGroup(Writer* w) {
   }
 }
 
-size_t WriteThread::EnterAsBatchGroupLeader(
+size_t WriteThreadImpl::EnterAsBatchGroupLeader(
     Writer* leader, WriteThread::Writer** last_writer,
     autovector<WriteThread::Writer*>* write_batch_group) {
   assert(leader->link_older == nullptr);
@@ -305,8 +307,8 @@ size_t WriteThread::EnterAsBatchGroupLeader(
   return size;
 }
 
-void WriteThread::LaunchParallelFollowers(ParallelGroup* pg,
-                                          SequenceNumber sequence) {
+void WriteThreadImpl::LaunchParallelFollowers(ParallelGroup* pg,
+                                              SequenceNumber sequence) {
   // EnterAsBatchGroupLeader already created the links from leader to
   // newer writers in the group
 
@@ -328,7 +330,7 @@ void WriteThread::LaunchParallelFollowers(ParallelGroup* pg,
   }
 }
 
-bool WriteThread::CompleteParallelWorker(Writer* w) {
+bool WriteThreadImpl::CompleteParallelWorker(Writer* w) {
   static AdaptationContext ctx("CompleteParallelWorker");
 
   auto* pg = w->parallel_group;
@@ -365,7 +367,7 @@ bool WriteThread::CompleteParallelWorker(Writer* w) {
   }
 }
 
-void WriteThread::EarlyExitParallelGroup(Writer* w) {
+void WriteThreadImpl::EarlyExitParallelGroup(Writer* w) {
   auto* pg = w->parallel_group;
 
   assert(w->state == STATE_PARALLEL_FOLLOWER);
@@ -376,8 +378,9 @@ void WriteThread::EarlyExitParallelGroup(Writer* w) {
   SetState(pg->leader, STATE_COMPLETED);
 }
 
-void WriteThread::ExitAsBatchGroupLeader(Writer* leader, Writer* last_writer,
-                                         Status status) {
+void WriteThreadImpl::ExitAsBatchGroupLeader(Writer* leader,
+                                             Writer* last_writer,
+                                             Status status) {
   assert(leader->link_older == nullptr);
 
   Writer* head = newest_writer_.load(std::memory_order_acquire);
@@ -424,7 +427,7 @@ void WriteThread::ExitAsBatchGroupLeader(Writer* leader, Writer* last_writer,
   }
 }
 
-void WriteThread::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
+void WriteThreadImpl::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
   static AdaptationContext ctx("EnterUnbatched");
 
   assert(w->batch == nullptr);
@@ -438,7 +441,7 @@ void WriteThread::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
   }
 }
 
-void WriteThread::ExitUnbatched(Writer* w) {
+void WriteThreadImpl::ExitUnbatched(Writer* w) {
   Status dummy_status;
   ExitAsBatchGroupLeader(w, w, dummy_status);
 }
