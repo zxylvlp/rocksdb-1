@@ -268,8 +268,9 @@ Status TransactionImpl::Commit() {
     // in non recovery mode and simply insert the values
     WriteBatchInternal::Append(working_batch, GetWriteBatch()->GetWriteBatch());
 
+    // Step 3: disable memtable write
     s = db_impl_->WriteImpl(write_options_, working_batch, nullptr, nullptr,
-                            log_number_);
+                            log_number_, true);
     if (!s.ok()) {
       return s;
     }
