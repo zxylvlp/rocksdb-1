@@ -1634,7 +1634,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
       bool has_valid_writes = false;
       status = WriteBatchInternal::InsertInto(
           &batch, column_family_memtables_.get(), &flush_scheduler_, true,
-          log_number, this, false /* concurrent_memtable_writes */,
+          log_number, this, true /* concurrent_memtable_writes */,
           next_sequence, &has_valid_writes);
       MaybeIgnoreError(&status);
       if (!status.ok()) {
@@ -1698,7 +1698,7 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& log_numbers,
     auto last_sequence = *next_sequence - 1;
     if ((*next_sequence != kMaxSequenceNumber) &&
         (versions_->LastSequence() <= last_sequence)) {
-      versions_->SetLastSequence(last_sequence);
+      //versions_->SetLastSequence(last_sequence);
     }
   }
 
@@ -4663,6 +4663,17 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   if (my_batch == nullptr) {
     return Status::Corruption("Batch is nullptr!");
   }
+  if (write_options.skipBatching) {
+      ColumnFamilyMemTablesImpl column_family_memtables(
+          versions_->GetColumnFamilySet());
+      auto last_version = versions_->FetchAddLastSequence(1);
+      WriteBatchInternal::SetSequence(my_batch, last_version);
+      auto s = WriteBatchInternal::InsertInto(
+          my_batch, &column_family_memtables, &flush_scheduler_,
+          write_options.ignore_missing_column_families, 0 /*log_number*/, this,
+          true /*concurrent_memtable_writes*/);
+      return s;
+  }
 
   Status status;
 
@@ -4703,8 +4714,8 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 
     if (write_thread_.CompleteParallelWorker(&w)) {
       // we're responsible for early exit
-      auto last_sequence = w.parallel_group->last_sequence;
-      versions_->SetLastSequence(last_sequence);
+      //auto last_sequence = w.parallel_group->last_sequence;
+      //versions_->SetLastSequence(last_sequence);
       write_thread_.EarlyExitParallelGroup(&w);
     }
     assert(w.state == WriteThread::STATE_COMPLETED);
@@ -4871,6 +4882,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       }
     }
 
+    last_sequence = versions_->FetchAddLastSequence(write_group.size());
     const SequenceNumber current_sequence = last_sequence + 1;
     last_sequence += total_count;
 
@@ -4982,7 +4994,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
         status = WriteBatchInternal::InsertInto(
             write_group, current_sequence, column_family_memtables_.get(),
             &flush_scheduler_, write_options.ignore_missing_column_families,
-            0 /*log_number*/, this);
+            0 /*log_number*/, this, true);
 
         if (status.ok()) {
           // There were no write failures. Set leader's status
@@ -5019,7 +5031,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       }
 
       if (!exit_completed_early && w.status.ok()) {
-        versions_->SetLastSequence(last_sequence);
+        //versions_->SetLastSequence(last_sequence);
         if (!need_log_sync) {
           write_thread_.ExitAsBatchGroupLeader(&w, last_writer, w.status);
           exit_completed_early = true;

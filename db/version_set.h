@@ -699,6 +699,10 @@ class VersionSet {
     last_sequence_.store(s, std::memory_order_release);
   }
 
+  uint64_t FetchAddLastSequence(int i) {
+    return last_sequence_.fetch_add(i, std::memory_order_acq_rel);
+  }
+
   // Mark the specified file number as used.
   // REQUIRED: this is only called during single-threaded recovery
   void MarkFileNumberUsedDuringRecovery(uint64_t number);

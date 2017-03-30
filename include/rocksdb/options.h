@@ -1025,6 +1025,8 @@ struct WriteOptions {
   // and the write may got lost after a crash.
   bool disableWAL;
 
+  bool skipBatching = false;
+
   // If true and if user is trying to write to column families that don't exist
   // (they were dropped),  ignore the write (don't return an error). If there
   // are multiple writes in a WriteBatch, other writes will succeed.

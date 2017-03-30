@@ -189,10 +189,9 @@ Status TransactionImpl::Prepare() {
     WriteOptions write_options = write_options_;
     write_options.disableWAL = false;
     WriteBatchInternal::MarkEndPrepare(GetWriteBatch()->GetWriteBatch(), name_);
-    // Step 4.1: Write to memtable with Prepare
     s = db_impl_->WriteImpl(write_options, GetWriteBatch()->GetWriteBatch(),
                             /*callback*/ nullptr, &log_number_, /*log ref*/ 0,
-                            /* disable_memtable*/ false);
+                            /* disable_memtable*/ true);
     if (s.ok()) {
       assert(log_number_ != 0);
       dbimpl_->MarkLogAsContainingPrepSection(log_number_);
@@ -267,7 +266,7 @@ Status TransactionImpl::Commit() {
     // insert prepared batch into Memtable only skipping WAL.
     // Memtable will ignore BeginPrepare/EndPrepare markers
     // in non recovery mode and simply insert the values
-    WriteBatchInternal::Append(working_batch, GetWriteBatch()->GetWriteBatch());
+    //WriteBatchInternal::Append(working_batch, GetWriteBatch()->GetWriteBatch());
 
     // Step 3: disable memtable write
     s = db_impl_->WriteImpl(write_options_, working_batch, nullptr, nullptr,
