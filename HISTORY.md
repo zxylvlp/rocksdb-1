@@ -9,6 +9,7 @@
 
 ### New Features
 * Memtable flush can be avoided during checkpoint creation if total log file size is smaller than a threshold specified by the user.
+* New option enable_pipelined_write which may improve write throughput and reduce latency of the prepare pahse of two-phase commit.
 
 ## 5.3.0 (03/08/2017)
 ### Public API Change

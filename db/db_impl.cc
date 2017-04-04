@@ -4658,7 +4658,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
   if (my_batch == nullptr) {
     return Status::Corruption("Batch is nullptr!");
   }
-  if (immutable_db_options_.enable_pipeline_write) {
+  if (immutable_db_options_.enable_pipelined_write) {
     return PipelineWriteImpl(write_options, my_batch, callback, log_used,
                              log_ref, disable_memtable);
   }
