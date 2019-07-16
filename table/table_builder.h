@@ -38,7 +38,7 @@ struct TableReaderOptions {
       : TableReaderOptions(_ioptions, _prefix_extractor, _env_options,
                            _internal_comparator, _skip_filters, _immortal,
                            _level, 0 /* _largest_seqno */,
-                           _block_cache_tracer) {}
+                           false /* _has_global_seqno*/, _block_cache_tracer) {}
 
   // @param skip_filters Disables loading/accessing the filter block
   TableReaderOptions(const ImmutableCFOptions& _ioptions,
@@ -46,7 +46,7 @@ struct TableReaderOptions {
                      const EnvOptions& _env_options,
                      const InternalKeyComparator& _internal_comparator,
                      bool _skip_filters, bool _immortal, int _level,
-                     SequenceNumber _largest_seqno,
+                     SequenceNumber _largest_seqno, bool _has_global_seqno,
                      BlockCacheTracer* const _block_cache_tracer)
       : ioptions(_ioptions),
         prefix_extractor(_prefix_extractor),
@@ -56,6 +56,7 @@ struct TableReaderOptions {
         immortal(_immortal),
         level(_level),
         largest_seqno(_largest_seqno),
+        has_global_seqno(_has_global_seqno),
         block_cache_tracer(_block_cache_tracer) {}
 
   const ImmutableCFOptions& ioptions;
@@ -70,6 +71,9 @@ struct TableReaderOptions {
   int level;
   // largest seqno in the table
   SequenceNumber largest_seqno;
+
+  bool has_global_seqno;
+
   BlockCacheTracer* const block_cache_tracer;
 };
 
